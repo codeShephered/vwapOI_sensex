@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NSE/BSE Options System V2</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1F3864;--navy2:#16295A;--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
+  --border:#30363d;--green:#2ea043;--red:#f85149;--orange:#e3b341;
+  --blue:#58a6ff;--purple:#bc8cff;--cyan:#39d353;--text:#c9d1d9;--text2:#8b949e;
+  --up:#3fb950;--dn:#f85149;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;font-size:13px}
+.topbar{background:var(--navy);padding:.6rem 1.5rem;display:flex;
+  align-items:center;justify-content:space-between;border-bottom:2px solid var(--navy2)}
+.topbar h1{font-size:1.1rem;font-weight:700;letter-spacing:.04em;color:#fff}
+.topbar .sub{font-size:.72rem;color:#9ab0cc;margin-left:.5rem}
+.badge{background:#e9eff7;color:var(--navy);font-size:.65rem;font-weight:700;
+  padding:2px 7px;border-radius:12px;margin-left:.4rem}
+.layout{display:grid;grid-template-columns:260px 1fr;gap:0;min-height:calc(100vh - 46px)}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:1rem;
+  display:flex;flex-direction:column;gap:.75rem;overflow-y:auto}
+.ctrl-group{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.75rem}
+.ctrl-group h3{font-size:.7rem;font-weight:700;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem}
+.btn{width:100%;padding:.5rem .75rem;border:none;border-radius:6px;
+  cursor:pointer;font-size:.8rem;font-weight:600;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:.4rem}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover:not(:disabled){background:#2d9a40}
+.btn-red{background:var(--red);color:#fff}
+.btn-red:hover:not(:disabled){background:#da3a33}
+.btn-blue{background:var(--blue);color:#000}
+.btn-blue:hover:not(:disabled){background:#4a9ff5}
+.btn-orange{background:var(--orange);color:#000}
+.btn-orange:hover:not(:disabled){background:#d4a332}
+.btn-grey{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-grey:hover:not(:disabled){background:#2a2f38}
+.btn-sm{width:auto;padding:.25rem .6rem;font-size:.7rem;border-radius:4px}
+.btn-row{display:flex;gap:.5rem}
+.btn-row .btn{flex:1}
+.mode-toggle{display:flex;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.mode-toggle button{flex:1;padding:.45rem;border:none;cursor:pointer;
+  font-size:.78rem;font-weight:600;transition:all .15s}
+.mode-toggle .paper,.mode-toggle .live{background:#2d333b;color:var(--text2)}
+.mode-toggle .active-paper{background:var(--orange);color:#000}
+.mode-toggle .active-live{background:var(--red);color:#fff}
+input[type=text],input[type=password]{width:100%;background:#0d1117;
+  border:1px solid var(--border);border-radius:5px;padding:.4rem .6rem;
+  color:var(--text);font-size:.78rem;margin-bottom:.4rem}
+input:focus{outline:none;border-color:var(--blue)}
+.label-sm{font-size:.7rem;color:var(--text2);margin-bottom:.2rem;display:block}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:.3rem}
+.dot-green{background:var(--green)}.dot-red{background:var(--red)}
+.main{padding:1rem;display:flex;flex-direction:column;gap:.75rem;overflow-y:auto}
+/* Stats row — now 6 cols for SENSEX expiry */
+.stat-row{display:grid;grid-template-columns:repeat(6,1fr);gap:.5rem}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem}
+.stat-label{font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem}
+.stat-val{font-size:1.05rem;font-weight:700;color:var(--text)}
+.stat-sub{font-size:.65rem;color:var(--text2)}
+/* 3-column instrument grid */
+.inst-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem}
+.inst-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:.9rem}
+.inst-card h2{font-size:.85rem;font-weight:700;color:var(--blue);
+  border-bottom:1px solid var(--border);padding-bottom:.4rem;margin-bottom:.6rem;
+  display:flex;align-items:center;justify-content:space-between}
+.data-row{display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:.3rem;font-size:.75rem}
+.data-label{color:var(--text2)}
+.data-val{font-weight:600;color:var(--text)}
+.regime-badge{font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:4px}
+.regime-TRENDING_UP{background:#0d3321;color:var(--green)}
+.regime-TRENDING_DOWN{background:#2d0f0f;color:var(--red)}
+.regime-SIDEWAYS{background:#2d2808;color:var(--orange)}
+.regime-CHOPPY{background:#1a1a2e;color:var(--purple)}
+.regime-UNKNOWN{background:var(--bg3);color:var(--text2)}
+.signal-box{background:var(--bg3);border-radius:6px;padding:.5rem .65rem;
+  margin-top:.4rem;font-size:.72rem}
+.signal-entry{border-left:3px solid var(--green)}
+.signal-exit{border-left:3px solid var(--red)}
+.signal-none{border-left:3px solid var(--border)}
+.signal-title{font-weight:700;font-size:.75rem;margin-bottom:.2rem}
+.up{color:var(--up)}.dn{color:var(--dn)}
+/* Position card inside instrument card */
+.pos-card{background:var(--bg3);border:1px solid var(--green);border-radius:8px;
+  padding:.65rem;margin-top:.4rem}
+.pos-row{display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:.2rem}
+/* Open Positions table */
+.open-pos-table{width:100%;border-collapse:collapse;font-size:.72rem}
+.open-pos-table th{background:var(--bg3);color:var(--text2);padding:.35rem .5rem;
+  text-align:left;border-bottom:1px solid var(--border);font-weight:600;font-size:.65rem}
+.open-pos-table td{padding:.35rem .5rem;border-bottom:1px solid var(--border);
+  vertical-align:middle}
+.open-pos-table tr:hover td{background:var(--bg3)}
+/* History table */
+.hist-table{width:100%;border-collapse:collapse;font-size:.72rem}
+.hist-table th{background:var(--bg3);color:var(--text2);padding:.35rem .5rem;
+  text-align:left;border-bottom:1px solid var(--border);font-weight:600;font-size:.65rem}
+.hist-table td{padding:.3rem .5rem;border-bottom:1px solid var(--border)}
+.hist-table tr:hover td{background:var(--bg3)}
+.pnl-pos{color:var(--up);font-weight:700}.pnl-neg{color:var(--dn);font-weight:700}
+.log-box{background:#0a0c10;border:1px solid var(--border);border-radius:8px;
+  height:180px;overflow-y:auto;padding:.5rem;font-family:monospace;font-size:.7rem}
+.log-DEBUG{color:#555}.log-INFO{color:var(--text2)}.log-WARNING{color:var(--orange)}.log-ERROR{color:var(--red)}
+.score-bar-bg{background:var(--bg3);border-radius:4px;height:5px;margin:.2rem 0}
+.score-bar{height:5px;border-radius:4px;transition:width .3s}
+.oi-badge{font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:3px}
+.oi-BULLISH{background:#0d3321;color:var(--green)}
+.oi-BEARISH{background:#2d0f0f;color:var(--red)}
+.oi-NEUTRAL{background:var(--bg3);color:var(--text2)}
+.section-title{font-size:.72rem;font-weight:700;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem}
+.empty-msg{color:var(--text2);font-size:.75rem;padding:.5rem;text-align:center}
+/* SENSEX card tint */
+.card-sensex{border-color:#3d2d00 !important}
+.card-sensex h2{color:var(--orange) !important}
+@media(max-width:1100px){.inst-grid{grid-template-columns:1fr 1fr}.stat-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.layout{grid-template-columns:1fr}.sidebar{display:none}.inst-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:.5rem">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+    <h1>Options System<span class="sub">V2</span></h1>
+    <span class="badge">NIFTY · BANKNIFTY · SENSEX</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:1rem;font-size:.75rem">
+    <span id="conn_dot"><span class="dot dot-red"></span><span id="conn_lbl">Disconnected</span></span>
+    <span id="tick_lbl" style="color:#555">—</span>
+    <span id="mode_lbl" style="font-weight:700;color:var(--orange)">PAPER</span>
+  </div>
+</div>
+
+<div class="layout">
+<!-- ── Sidebar ── -->
+<div class="sidebar">
+  <div class="ctrl-group">
+    <h3>Zerodha Credentials</h3>
+    <label class="label-sm">API Key (permanent)</label>
+    <input type="text" id="api_key" placeholder="api_key">
+    <label class="label-sm">Access Token <span style="color:var(--red)">*</span></label>
+    <input type="password" id="access_token" placeholder="regenerate each morning">
+    <button class="btn btn-blue" onclick="connectZerodha()" style="margin-top:.2rem">🔗 Connect Zerodha</button>
+    <div style="margin-top:.4rem;font-size:.65rem;color:var(--text2)">Token expires midnight IST. <a href="/zerodha/login" style="color:var(--blue)">OAuth login</a></div>
+  </div>
+  <div class="ctrl-group">
+    <h3>Trading Mode</h3>
+    <div class="mode-toggle">
+      <button id="btn_paper" class="paper active-paper" onclick="setMode('paper')">📋 Paper</button>
+      <button id="btn_live"  class="live"               onclick="setMode('live')">⚡ Live</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <h3>Bot Control</h3>
+    <button class="btn btn-green" id="btn_start" onclick="startBot()">▶ Start Bot</button>
+    <div style="height:.35rem"></div>
+    <button class="btn btn-red" id="btn_stop" onclick="stopBot()" disabled>⏹ Stop Bot</button>
+  </div>
+  <div class="ctrl-group">
+    <h3>Emergency</h3>
+    <button class="btn btn-orange" onclick="emergencyExit()">🚨 Exit ALL Positions</button>
+  </div>
+  <div class="ctrl-group">
+    <h3>Manual Exit</h3>
+    <div class="btn-row">
+      <button class="btn btn-grey" onclick="manualExit('NIFTY')">NIFTY</button>
+      <button class="btn btn-grey" onclick="manualExit('BANKNIFTY')">BNK</button>
+      <button class="btn btn-grey" onclick="manualExit('SENSEX')">SENSEX</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <h3>Strategy Settings</h3>
+    <div class="data-row"><span class="data-label">Min Score</span><span class="data-val">90 pts</span></div>
+    <div class="data-row"><span class="data-label">Initial SL</span><span class="data-val">20%</span></div>
+    <div class="data-row"><span class="data-label">Breakeven at</span><span class="data-val">+25%</span></div>
+    <div class="data-row"><span class="data-label">Trail at</span><span class="data-val">+40%</span></div>
+    <div class="data-row"><span class="data-label">Window</span><span class="data-val">9:30–14:45</span></div>
+    <div class="data-row"><span class="data-label">SENSEX Exchange</span><span class="data-val">BFO</span></div>
+  </div>
+  <div class="ctrl-group">
+    <h3>Utilities</h3>
+    <a href="/api/logs" class="btn btn-grey" style="text-decoration:none">⬇ Download Logs</a>
+  </div>
+</div>
+
+<!-- ── Main ── -->
+<div class="main">
+
+  <!-- Stats row -->
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-label">Daily P&L</div>
+      <div class="stat-val" id="st_pnl">₹0</div>
+      <div class="stat-sub">Realized</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Trades · Win%</div>
+      <div class="stat-val" id="st_total">0</div>
+      <div class="stat-sub" id="st_wr">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">W / L</div>
+      <div class="stat-val"><span class="up" id="st_wins">0</span> / <span class="dn" id="st_losses">0</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">NIFTY Expiry</div>
+      <div class="stat-val" style="font-size:.8rem" id="exp_NIFTY">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">BANKNIFTY Expiry</div>
+      <div class="stat-val" style="font-size:.8rem" id="exp_BANKNIFTY">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">SENSEX Expiry</div>
+      <div class="stat-val" style="font-size:.8rem" id="exp_SENSEX">—</div>
+    </div>
+  </div>
+
+  <!-- Instrument cards: 3 columns -->
+  <div class="inst-grid">
+    <!-- NIFTY -->
+    <div class="inst-card" id="card_NIFTY">
+      <h2>NIFTY 50 <span class="regime-badge regime-UNKNOWN" id="regime_NIFTY">UNKNOWN</span></h2>
+      <div class="data-row"><span class="data-label">LTP</span><span class="data-val up" id="ltp_NIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">VWAP</span><span class="data-val" id="vwap_NIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">Slope</span><span class="data-val" id="vwap_slope_NIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">OI</span><span id="oi_NIFTY"><span class="oi-badge oi-NEUTRAL">NEUTRAL</span></span></div>
+      <div class="data-row"><span class="data-label">SAR</span><span class="data-val" id="sar_NIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">Score</span><span class="data-val" id="score_NIFTY">—</span></div>
+      <div class="score-bar-bg"><div class="score-bar" id="score_bar_NIFTY" style="width:0%"></div></div>
+      <div id="signal_NIFTY" class="signal-box signal-none"><div class="signal-title" style="color:var(--text2)">Scanning…</div></div>
+      <div id="inline_pos_NIFTY"></div>
+    </div>
+    <!-- BANKNIFTY -->
+    <div class="inst-card" id="card_BANKNIFTY">
+      <h2>BANKNIFTY <span class="regime-badge regime-UNKNOWN" id="regime_BANKNIFTY">UNKNOWN</span></h2>
+      <div class="data-row"><span class="data-label">LTP</span><span class="data-val up" id="ltp_BANKNIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">VWAP</span><span class="data-val" id="vwap_BANKNIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">Slope</span><span class="data-val" id="vwap_slope_BANKNIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">OI</span><span id="oi_BANKNIFTY"><span class="oi-badge oi-NEUTRAL">NEUTRAL</span></span></div>
+      <div class="data-row"><span class="data-label">SAR</span><span class="data-val" id="sar_BANKNIFTY">—</span></div>
+      <div class="data-row"><span class="data-label">Score</span><span class="data-val" id="score_BANKNIFTY">—</span></div>
+      <div class="score-bar-bg"><div class="score-bar" id="score_bar_BANKNIFTY" style="width:0%"></div></div>
+      <div id="signal_BANKNIFTY" class="signal-box signal-none"><div class="signal-title" style="color:var(--text2)">Scanning…</div></div>
+      <div id="inline_pos_BANKNIFTY"></div>
+    </div>
+    <!-- SENSEX -->
+    <div class="inst-card card-sensex" id="card_SENSEX">
+      <h2>SENSEX <span style="font-size:.6rem;color:var(--text2);font-weight:400">BSE · BFO · Lot:10</span>
+        <span class="regime-badge regime-UNKNOWN" id="regime_SENSEX">UNKNOWN</span>
+      </h2>
+      <div class="data-row"><span class="data-label">LTP</span><span class="data-val up" id="ltp_SENSEX">—</span></div>
+      <div class="data-row"><span class="data-label">VWAP</span><span class="data-val" id="vwap_SENSEX">—</span></div>
+      <div class="data-row"><span class="data-label">Slope</span><span class="data-val" id="vwap_slope_SENSEX">—</span></div>
+      <div class="data-row"><span class="data-label">OI</span><span id="oi_SENSEX"><span class="oi-badge oi-NEUTRAL">NEUTRAL</span></span></div>
+      <div class="data-row"><span class="data-label">SAR</span><span class="data-val" id="sar_SENSEX">—</span></div>
+      <div class="data-row"><span class="data-label">Score</span><span class="data-val" id="score_SENSEX">—</span></div>
+      <div class="score-bar-bg"><div class="score-bar" id="score_bar_SENSEX" style="width:0%"></div></div>
+      <div id="signal_SENSEX" class="signal-box signal-none"><div class="signal-title" style="color:var(--text2)">Scanning…</div></div>
+      <div id="inline_pos_SENSEX"></div>
+    </div>
+  </div>
+
+  <!-- ── Open Positions ── -->
+  <div>
+    <div class="section-title">Open Positions — Active Trades</div>
+    <div id="open_pos_wrap">
+      <div class="empty-msg" id="open_pos_empty">No open positions</div>
+      <table class="open-pos-table" id="open_pos_table" style="display:none">
+        <thead>
+          <tr>
+            <th>Instrument</th><th>Type</th><th>Strike</th><th>Pattern</th>
+            <th>Score</th><th>Entry Time</th><th>Entry Price</th>
+            <th>Current Price</th><th>Highest</th><th>SL Floor</th>
+            <th>MTM P&L</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="open_pos_body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Trade History ── -->
+  <div>
+    <div class="section-title">Trade History — Closed Trades (last 20)</div>
+    <table class="hist-table">
+      <thead>
+        <tr>
+          <th>Inst</th><th>Type</th><th>Strike</th><th>Pattern</th><th>Score</th>
+          <th>Entry Time</th><th>Exit Time</th>
+          <th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Exit Reason</th>
+        </tr>
+      </thead>
+      <tbody id="hist_body"></tbody>
+    </table>
+  </div>
+
+  <!-- Log -->
+  <div>
+    <div class="section-title">Live Log</div>
+    <div class="log-box" id="log_box"></div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+const INSTRUMENTS = ['NIFTY','BANKNIFTY','SENSEX'];
+
+async function poll(){
+  try{
+    const d = await fetch('/api/status').then(r=>r.json());
+    updateAll(d);
+  }catch(e){}
+}
+setInterval(poll, 1500);
+
+function fmt(n,dec=2){
+  if(n==null||isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-IN',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
+function fmtPnl(n){
+  const s=fmt(Math.abs(n));
+  return n>=0?`<span class="pnl-pos">+₹${s}</span>`:`<span class="pnl-neg">-₹${s}</span>`;
+}
+
+function updateAll(d){
+  const conn=d.connected;
+  document.getElementById('conn_dot').innerHTML=
+    `<span class="dot ${conn?'dot-green':'dot-red'}"></span><span>${conn?'Connected':'Disconnected'}</span>`;
+  document.getElementById('tick_lbl').textContent=d.last_tick||'—';
+  document.getElementById('mode_lbl').textContent=(d.mode||'paper').toUpperCase();
+
+  const s=d.stats||{};
+  const pnl=s.total_pnl||0;
+  document.getElementById('st_pnl').innerHTML=
+    `<span class="${pnl>=0?'up':'dn'}">${pnl>=0?'+':''}₹${fmt(pnl)}</span>`;
+  document.getElementById('st_total').textContent=s.total||0;
+  document.getElementById('st_wr').textContent=`Win rate: ${s.win_rate||0}%`;
+  document.getElementById('st_wins').textContent=s.wins||0;
+  document.getElementById('st_losses').textContent=s.losses||0;
+
+  for(const inst of INSTRUMENTS){
+    document.getElementById(`exp_${inst}`).textContent=(d.expiry||{})[inst]||'—';
+    updateInst(inst, d);
+  }
+
+  updateOpenPositions(d.positions||[]);
+  updateHistory(d.history||[]);
+}
+
+function updateInst(inst, d){
+  const mkt  =(d.market||{})[inst]||{};
+  const vwap =(d.vwap  ||{})[inst]||{};
+  const oi   =(d.oi    ||{})[inst]||{};
+  const sc   =(d.score ||{})[inst]||{};
+  const sar  =(d.sar   ||{})[inst]||{};
+  const sig  =(d.signals||{})[inst]||{};
+  const regime=(d.regime||{})[inst]||'UNKNOWN';
+
+  const ltp=mkt.last_price;
+  document.getElementById(`ltp_${inst}`).textContent=ltp?fmt(ltp,2):'—';
+  document.getElementById(`vwap_${inst}`).textContent=
+    vwap.value?`₹${fmt(vwap.value,2)} (${vwap.price_above?'▲above':'▼below'})`:'—';
+  document.getElementById(`vwap_slope_${inst}`).textContent=
+    vwap.slope!=null?`${vwap.slope>=0?'+':''}${fmt(vwap.slope,3)}`:'—';
+  document.getElementById(`oi_${inst}`).innerHTML=
+    `<span class="oi-badge oi-${oi.signal||'NEUTRAL'}">${oi.signal||'NEUTRAL'}</span>
+     <small style="color:var(--text2);margin-left:.3rem">PCR ${oi.pcr?fmt(oi.pcr,2):'—'}</small>`;
+  document.getElementById(`sar_${inst}`).innerHTML=
+    sar.value?`₹${fmt(sar.value,2)} <span style="color:${sar.bullish?'var(--up)':'var(--dn)'}">
+      ${sar.bullish?'▲':'▼'}</span>`:'—';
+
+  const rb=document.getElementById(`regime_${inst}`);
+  rb.textContent=regime; rb.className=`regime-badge regime-${regime}`;
+
+  const sv=sc.total||0;
+  document.getElementById(`score_${inst}`).textContent=
+    sc.total!=null?`${sc.total} ${sc.passes?'✓':'✗'}`:'—';
+  const bar=document.getElementById(`score_bar_${inst}`);
+  bar.style.width=Math.min(100,sv/1.6)+'%';
+  bar.style.background=sc.passes?'var(--green)':'var(--text2)';
+
+  updateSignal(inst, sig);
+
+  // Inline mini-position inside instrument card
+  const pos=(d.positions||[]).find(p=>p.instrument===inst);
+  updateInlinePos(inst, pos);
+}
+
+function updateSignal(inst, sig){
+  const el=document.getElementById(`signal_${inst}`);
+  if(!sig||!sig.type||sig.type==='none'){
+    el.className='signal-box signal-none';
+    el.innerHTML='<div class="signal-title" style="color:var(--text2)">Scanning…</div>';
+    return;
+  }
+  if(sig.type==='entry'){
+    const c=sig.opt_type==='CE'?'up':'dn';
+    el.className='signal-box signal-entry';
+    el.innerHTML=`
+      <div class="signal-title ${c}">${sig.opt_type==='CE'?'▲':'▼'} ${sig.opt_type} ${sig.pattern||''} (T${sig.tier})</div>
+      <div>Strike: <b>${sig.strike}</b>  Score: <b>${sig.score}</b></div>
+      <div>Premium: ₹${fmt(sig.premium,2)}${sig.estimated?' (est)':''}</div>
+      <div style="color:var(--text2);font-size:.65rem">${sig.ts||''}</div>`;
+  }else if(sig.type==='exit'){
+    el.className='signal-box signal-exit';
+    el.innerHTML=`<div class="signal-title dn">⊗ EXIT: ${sig.reason||''}</div>
+      <div style="color:var(--text2);font-size:.65rem">${sig.ts||''}</div>`;
+  }
+}
+
+function updateInlinePos(inst, pos){
+  const el=document.getElementById(`inline_pos_${inst}`);
+  if(!pos){el.innerHTML=''; return;}
+  const pnl=pos.pnl||0;
+  el.innerHTML=`<div class="pos-card">
+    <div class="pos-row">
+      <b>${pos.option_type} ${Math.round(pos.strike)}</b>
+      <span class="${pnl>=0?'up':'dn'}">${pnl>=0?'+':''}₹${fmt(pnl,2)}</span>
+    </div>
+    <div class="pos-row" style="color:var(--text2)">
+      <span>Entry ₹${fmt(pos.entry_premium,2)}</span>
+      <span>LTP ₹${fmt(pos.current_premium,2)}</span>
+      <span>SL ₹${fmt(pos.sl_premium,2)}</span>
+    </div>
+    <div class="pos-row" style="color:var(--text2);font-size:.65rem">
+      <span>${pos.pattern} · ${pos.entry_time||''}</span>
+      <span>${pos.breakeven_hit?'BE✓':''} ${pos.trailing_active?'Trail✓':''}</span>
+    </div>
+  </div>`;
+}
+
+// ── Open Positions table ──────────────────────────────────────────────────────
+function updateOpenPositions(positions){
+  const empty=document.getElementById('open_pos_empty');
+  const table=document.getElementById('open_pos_table');
+  const tbody=document.getElementById('open_pos_body');
+
+  if(!positions||positions.length===0){
+    empty.style.display='block'; table.style.display='none';
+    return;
+  }
+  empty.style.display='none'; table.style.display='table';
+
+  tbody.innerHTML=positions.map(p=>{
+    const pnl=p.pnl||0;
+    const pct=p.pnl_pct||0;
+    const pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
+    const expLbl=p.instrument==='BANKNIFTY'?'Monthly':'Weekly';
+    const status=p.trailing_active?'🔄 Trailing':p.breakeven_hit?'🟢 Breakeven':'🔵 Active';
+    return `<tr>
+      <td><b>${p.instrument}</b></td>
+      <td>${expLbl} ${p.option_type}</td>
+      <td>${Math.round(p.strike)}</td>
+      <td>${p.pattern}</td>
+      <td>${p.score||'—'}</td>
+      <td>${p.entry_time||'—'}</td>
+      <td>₹${fmt(p.entry_premium,2)}</td>
+      <td>₹${fmt(p.current_premium,2)}</td>
+      <td>₹${fmt(p.highest_premium,2)}</td>
+      <td>₹${fmt(p.sl_premium,2)}</td>
+      <td><span class="${pnlCls}">${pnl>=0?'+':''}₹${fmt(pnl,2)} (${pct>=0?'+':''}${fmt(pct,1)}%)</span></td>
+      <td style="font-size:.68rem">${status}</td>
+      <td>
+        <button class="btn btn-red btn-sm"
+          onclick="exitSingle('${p.instrument}')"
+          title="Exit ${p.instrument} ${p.option_type} position">
+          ✕ Exit
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Trade History table ───────────────────────────────────────────────────────
+function updateHistory(history){
+  const tbody=document.getElementById('hist_body');
+  tbody.innerHTML=history.slice().reverse().map(h=>{
+    const pnl=h.final_pnl||0;
+    return `<tr>
+      <td><b>${h.instrument}</b></td>
+      <td>${h.option_type}</td>
+      <td>${Math.round(h.strike)}</td>
+      <td>${h.pattern}</td>
+      <td>${h.score||'—'}</td>
+      <td>${h.entry_time||'—'}</td>
+      <td>${h.exit_time||'—'}</td>
+      <td>₹${fmt(h.entry_premium,2)}</td>
+      <td>₹${fmt(h.current_premium,2)}</td>
+      <td>${fmtPnl(pnl)}</td>
+      <td style="color:var(--text2);font-size:.65rem">${h.exit_reason||''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── SSE log ───────────────────────────────────────────────────────────────────
+const logBox=document.getElementById('log_box');
+const evtSrc=new EventSource('/stream');
+evtSrc.onmessage=function(e){
+  try{
+    const d=JSON.parse(e.data);
+    if(!d.level) return;
+    const line=document.createElement('div');
+    line.className=`log-${d.level}`;
+    line.textContent=`${d.ts} [${d.level}] ${d.module}: ${d.message}`;
+    logBox.appendChild(line);
+    if(logBox.children.length>300) logBox.removeChild(logBox.firstChild);
+    logBox.scrollTop=logBox.scrollHeight;
+  }catch(err){}
+};
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+async function connectZerodha(){
+  const key=document.getElementById('api_key').value.trim();
+  const token=document.getElementById('access_token').value.trim();
+  if(!key||!token){alert('Enter both API key and access token'); return;}
+  const r=await fetch('/api/set-token',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({api_key:key,access_token:token})
+  }).then(r=>r.json());
+  if(r.status==='connected') alert('Zerodha connected ✓');
+  else alert('Connection failed: '+(r.message||'unknown error'));
+}
+
+async function startBot(){
+  const r=await fetch('/api/start',{method:'POST'}).then(r=>r.json());
+  if(r.status==='started'){
+    document.getElementById('btn_start').disabled=true;
+    document.getElementById('btn_stop').disabled=false;
+  }else alert(r.error||'Could not start');
+}
+
+async function stopBot(){
+  await fetch('/api/stop',{method:'POST'});
+  document.getElementById('btn_start').disabled=false;
+  document.getElementById('btn_stop').disabled=true;
+}
+
+async function emergencyExit(){
+  if(!confirm('Exit ALL open positions immediately?')) return;
+  const r=await fetch('/api/emergency-exit',{method:'POST'}).then(r=>r.json());
+  alert(`Closed ${r.count} position(s)`);
+}
+
+async function manualExit(inst){
+  if(!confirm(`Exit ${inst} position now?`)) return;
+  exitSingle(inst);
+}
+
+async function exitSingle(inst){
+  const r=await fetch('/api/exit-trade',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({instrument:inst})
+  }).then(r=>r.json());
+  if(r.error) alert(r.error);
+  else{
+    const pnl=((r.record||{}).final_pnl||0);
+    alert(`${inst} closed  P&L: ${pnl>=0?'+':''}₹${Math.abs(pnl).toFixed(2)}`);
+  }
+}
+
+async function setMode(m){
+  const r=await fetch('/api/mode',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({mode:m})
+  }).then(r=>r.json());
+  if(r.error){alert(r.error);return;}
+  document.getElementById('btn_paper').className='paper '+(m==='paper'?'active-paper':'');
+  document.getElementById('btn_live').className='live '+(m==='live'?'active-live':'');
+  document.getElementById('mode_lbl').textContent=m.toUpperCase();
+}
+
+poll();
+</script>
+</body>
+</html>
