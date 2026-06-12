@@ -56,10 +56,10 @@ INSTRUMENTS = {
     },
     "SENSEX": {
         "zerodha_symbol":    "BSE:SENSEX",
-        "lot_size":          10,         # BSE SENSEX lot size
+        "lot_size":          20,         # BSE SENSEX lot size
         "strike_interval":   100,
         "expiry_type":       "weekly",
-        "expiry_weekday":    4,          # Friday
+        "expiry_weekday":    3,          # Thursday
         "ce_strike_mode":    "otm",
         "pe_strike_mode":    "otm",
         "vwap_token":        265,        # Zerodha BSE token for SENSEX
@@ -125,5 +125,5 @@ MAX_MEMORY_LOGS = 1000
 
 # ── Flask ─────────────────────────────────────────────────────────────────────
 FLASK_HOST  = "0.0.0.0"
-FLASK_PORT  = 5001
+FLASK_PORT  = 5004
 SECRET_KEY  = "nse_options_v2_2026"
