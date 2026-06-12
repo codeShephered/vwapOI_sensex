@@ -9,9 +9,9 @@ Strategy:
 import os
 
 # ── Zerodha ───────────────────────────────────────────────────────────────────
-ZERODHA_API_KEY      = ""   # permanent key from kite.zerodha.com
-ZERODHA_API_SECRET   = ""   # permanent secret
-ZERODHA_ACCESS_TOKEN = ""   # regenerate every morning (expires midnight IST)
+#ZERODHA_API_KEY      = ""   # permanent key from kite.zerodha.com
+#ZERODHA_API_SECRET   = ""   # permanent secret
+#ZERODHA_ACCESS_TOKEN = ""   # regenerate every morning (expires midnight IST)
 
 # ── Mode ──────────────────────────────────────────────────────────────────────
 TRADING_MODE = "paper"   # "paper" | "live"
