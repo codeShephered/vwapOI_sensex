@@ -123,11 +123,22 @@ def _feed_ok() -> bool:
     return zerodha_feed is not None and zerodha_feed.is_connected()
 
 def _real_ltp(pos, spot: float, instrument: str) -> float:
+    """
+    Get option LTP for an open position.
+    Priority: real Zerodha LTP → last-known premium (on network error) → BS estimate.
+    Using last-known premium on transient errors prevents stale BS values from
+    triggering the premium SL incorrectly during brief network hiccups.
+    """
     if _feed_ok():
         ltp = zerodha_feed.get_option_ltp(pos.zerodha_symbol, instrument)
         if ltp > 0:
             return ltp
-    return pos.current_premium if pos.current_premium > 0 else bs_estimate(
+    # On network error: last-known premium is more reliable than a new BS estimate
+    # because BS estimate changes with spot movement but may not reflect real IV
+    if pos.current_premium > 0:
+        return pos.current_premium
+    # Only fall back to BS if no premium has ever been recorded
+    return bs_estimate(
         instrument, spot, pos.strike, pos.option_type,
         max((pos.expiry - __import__("datetime").date.today()).days, 1),
     )
@@ -438,6 +449,8 @@ def api_status():
         "stats":      trade_engine.get_stats(),
         "expiry": {inst: get_expiry(inst).strftime("%d-%b-%Y")
                    for inst in config.INSTRUMENTS},
+        "network_ok":    zerodha_feed._net_ok   if zerodha_feed else True,
+        "net_fail_count": zerodha_feed._net_fail if zerodha_feed else 0,
     })
 
 @app.route("/api/start", methods=["POST"])

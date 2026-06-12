@@ -207,11 +207,25 @@ def bs_estimate(instrument: str, spot: float,
 # ── Zerodha Feed ───────────────────────────────────────────────────────────────
 
 class ZerodhaFeed:
+    # Network errors that are TRANSIENT — always retry, never mark feed as dead
+    _TRANSIENT = (
+        "ConnectionResetError", "ConnectionError", "RemoteDisconnected",
+        "ChunkedEncodingError", "ReadTimeout", "ConnectTimeout",
+        "ProtocolError", "Connection aborted", "Connection reset",
+        "Read timed out", "Network is unreachable",
+    )
+    # Maximum retries for a single REST call on transient errors
+    _MAX_RETRIES   = 3
+    # Base backoff in seconds between retries (doubles each attempt)
+    _RETRY_BASE    = 0.25
+
     def __init__(self, api_key: str = "", access_token: str = ""):
-        self._api_key = api_key
-        self._token   = access_token
-        self._kite    = None
-        self._ok      = False
+        self._api_key  = api_key
+        self._token    = access_token
+        self._kite     = None
+        self._ok       = False          # auth/connection status
+        self._net_ok   = True           # network health (transient errors don't flip _ok)
+        self._net_fail = 0              # consecutive network failure count
         if api_key and access_token:
             self._connect()
 
@@ -263,10 +277,70 @@ class ZerodhaFeed:
                 logger.error(f"Zerodha connect failed: {msg}")
             ######################################
 
-    # ── Auth helpers ──────────────────────────────────────────────────────────
+    def _is_transient(self, exc: Exception) -> bool:
+        """
+        Returns True if the exception is a transient network error that should
+        be retried without marking the feed as permanently disconnected.
+        Auth errors (TokenException, InputException) are NOT transient.
+        """
+        msg      = str(exc)
+        exc_type = type(exc).__name__
+        # Explicit auth errors → not transient
+        if exc_type in ("TokenException", "InputException"):
+            return False
+        if any(k in msg for k in ("api_key", "access_token", "Incorrect", "TokenException")):
+            return False
+        # Network / transport errors → transient
+        return any(k in msg or k in exc_type for k in self._TRANSIENT)
 
-    @staticmethod
-    def login_url(api_key: str) -> str:
+    def _retry(self, fn, *args, label: str = "REST call", **kwargs):
+        """
+        Execute fn(*args, **kwargs) with up to _MAX_RETRIES retries on transient
+        network errors. Uses exponential backoff. Returns the result or raises
+        the last exception if all retries are exhausted.
+
+        On success after retries: resets _net_fail counter, logs recovery.
+        On persistent transient failure: increments _net_fail, logs degraded state.
+        Auth errors bypass retry and propagate immediately.
+        """
+        import time as _time
+        last_exc = None
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            try:
+                result = fn(*args, **kwargs)
+                if self._net_fail > 0:
+                    logger.info(
+                        f"Network recovered after {self._net_fail} failure(s) — {label}"
+                    )
+                    self._net_fail = 0
+                    self._net_ok   = True
+                return result
+            except Exception as exc:
+                last_exc = exc
+                if not self._is_transient(exc):
+                    raise   # auth errors propagate immediately
+                wait = self._RETRY_BASE * (2 ** (attempt - 1))   # 0.25 → 0.5 → 1.0s
+                if attempt < self._MAX_RETRIES:
+                    logger.debug(
+                        f"Transient error on {label} (attempt {attempt}/{self._MAX_RETRIES}): "
+                        f"{exc}  retrying in {wait:.2f}s …"
+                    )
+                    _time.sleep(wait)
+                else:
+                    self._net_fail += 1
+                    self._net_ok    = False
+                    # Log at WARNING every 5th consecutive failure to avoid log flood
+                    if self._net_fail == 1 or self._net_fail % 5 == 0:
+                        logger.warning(
+                            f"Network error ({self._net_fail} consecutive): {label}  "
+                            f"detail={exc}  "
+                            f"System continues with last-known values — will auto-recover."
+                        )
+                    else:
+                        logger.debug(f"Network error #{self._net_fail}: {label}: {exc}")
+        return None   # caller handles None as graceful degradation
+
+    # ── Auth helpers ──────────────────────────────────────────────────────────
         return f"https://kite.zerodha.com/connect/login?v=3&api_key={api_key}"
 
     def generate_session(self, request_token: str, api_secret: str) -> str:
@@ -295,12 +369,18 @@ class ZerodhaFeed:
     # ── Market data ───────────────────────────────────────────────────────────
 
     def get_quote(self, instrument: str) -> dict:
-        """Fetch index LTP, OHLC, and change."""
+        """
+        Fetch index LTP, OHLC with automatic retry on transient network errors.
+        Only sets self._ok = False on confirmed auth (token) failures.
+        Transient errors return {} but leave the feed alive for the next tick.
+        """
         if not self._ok:
             return {}
         sym = config.INSTRUMENTS[instrument]["zerodha_symbol"]
         try:
-            raw  = self._kite.quote([sym])
+            raw = self._retry(self._kite.quote, [sym], label=f"quote {instrument}")
+            if raw is None:
+                return {}   # all retries failed — return empty, system keeps running
             q    = raw.get(sym, {})
             ltp  = float(q.get("last_price", 0) or 0)
             if ltp == 0:
@@ -318,33 +398,41 @@ class ZerodhaFeed:
                 "pchange":    round(chg / prev * 100, 2) if prev else 0.0,
             }
         except Exception as exc:
-            if "TokenException" in str(exc):
+            # Only confirmed token failures permanently disconnect the feed
+            if "TokenException" in str(exc) or type(exc).__name__ == "TokenException":
                 self._ok = False
                 logger.error("Zerodha token expired — reconnect via dashboard")
             else:
-                logger.warning(f"quote({instrument}): {exc}")
+                # Transient error not caught by _retry (should not happen, but safety net)
+                logger.warning(f"get_quote({instrument}): {exc} — using last-known values")
             return {}
 
     def get_option_ltp(self, symbol: str, instrument: str = "") -> float:
         """
-        Fetch REAL option last traded price.
-        Routes to NFO (NIFTY/BANKNIFTY) or BFO (SENSEX) based on instrument.
-        Returns 0.0 if unavailable — caller uses BS estimate as fallback.
+        Fetch REAL option last traded price with automatic retry on network errors.
+        Returns 0.0 on failure — caller falls back to last-known premium or BS estimate.
+        Never sets self._ok = False (transient errors do not disconnect the feed).
         """
         if not self._ok:
             return 0.0
-        cfg_inst  = config.INSTRUMENTS.get(instrument, {})
-        opt_exch  = cfg_inst.get("options_exchange", "NFO")
-        try:
-            full = f"{opt_exch}:{symbol}"
-            raw  = self._kite.ltp([full])
-            ltp  = float(raw.get(full, {}).get("last_price", 0) or 0)
-            if ltp == 0:
-                raw2 = self._kite.quote([full])
-                ltp  = float(raw2.get(full, {}).get("last_price", 0) or 0)
+        cfg_inst = config.INSTRUMENTS.get(instrument, {})
+        opt_exch = cfg_inst.get("options_exchange", "NFO")
+        full     = f"{opt_exch}:{symbol}"
+
+        # First attempt: ltp() (faster)
+        raw = self._retry(self._kite.ltp, [full], label=f"option_ltp {symbol}")
+        if raw is not None:
+            ltp = float(raw.get(full, {}).get("last_price", 0) or 0)
+            if ltp > 0:
+                return ltp
+
+        # Fallback: quote() (sometimes ltp() misses non-traded options)
+        raw2 = self._retry(self._kite.quote, [full], label=f"option_quote {symbol}")
+        if raw2 is not None:
+            ltp = float(raw2.get(full, {}).get("last_price", 0) or 0)
+            if ltp > 0:
             return ltp
-        except Exception as exc:
-            logger.debug(f"option LTP {symbol}: {exc}")
+
             return 0.0
 
     def place_order(self, symbol: str, qty: int,
