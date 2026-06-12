@@ -431,7 +431,7 @@ class ZerodhaFeed:
         if raw2 is not None:
             ltp = float(raw2.get(full, {}).get("last_price", 0) or 0)
             if ltp > 0:
-            return ltp
+                return ltp
 
             return 0.0
 
